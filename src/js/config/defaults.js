@@ -208,6 +208,12 @@ const defaults = {
     googleIMA: {
       sdk: 'https://imasdk.googleapis.com/js/sdkloader/ima3.js',
     },
+    googleDrive: {
+      api: 'https://www.googleapis.com/drive/v3/files/{0}?alt=media&key={1}',
+      download: 'https://drive.usercontent.google.com/download?id={0}&export=download&confirm=t',
+      metadata: 'https://www.googleapis.com/drive/v3/files/{0}?fields=size&key={1}',
+      mp4box: 'https://cdn.jsdelivr.net/npm/mp4box@0.5.4/dist/mp4box.all.min.js',
+    },
   },
 
   // Custom control listeners
@@ -439,6 +445,19 @@ const defaults = {
     // Custom settings from Plyr
     customControls: true,
     noCookie: false, // Whether to use an alternative version of YouTube without cookies
+  },
+
+  // Google Drive sources (rewritten to streamable URLs for the HTML5 provider)
+  googleDrive: {
+    enabled: true,
+    // Optional Drive API key; uses the Drive API (supports range requests/seeking) instead of the download endpoint
+    apiKey: null,
+    // Stream MP4 files in byte-range chunks via Media Source Extensions (requires apiKey)
+    // Falls back to progressive download when unsupported
+    chunked: false,
+    chunkSize: 2 * 1024 * 1024, // Bytes per range request
+    bufferAhead: 30, // Seconds to buffer ahead of the playhead before pausing downloads
+    bufferBehind: 30, // Seconds to keep behind the playhead before freeing memory
   },
 
   // Media Metadata

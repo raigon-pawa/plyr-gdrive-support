@@ -16,6 +16,7 @@ import html5 from './html5';
 import Listeners from './listeners';
 import media from './media';
 import Ads from './plugins/ads';
+import GoogleDriveStream from './plugins/google-drive-stream';
 import PreviewThumbnails from './plugins/preview-thumbnails';
 import source from './source';
 import Storage from './storage';
@@ -24,6 +25,7 @@ import ui from './ui';
 import { closest } from './utils/arrays';
 import { createElement, hasClass, removeElement, replaceElement, toggleClass, wrap } from './utils/elements';
 import { off, on, once, triggerEvent, unbindListeners } from './utils/events';
+import { rewriteGoogleDriveSources } from './utils/google-drive';
 import is from './utils/is';
 import loadSprite from './utils/load-sprite';
 import { clamp } from './utils/numbers';
@@ -237,6 +239,23 @@ class Plyr {
           this.config.loop.active = true;
         }
 
+        // Google Drive links: stream in chunks if enabled, otherwise rewrite into streamable URLs
+        this.googleDriveStream = GoogleDriveStream.create(
+          this,
+          [this.media, ...this.media.querySelectorAll('source')].map((element) => ({
+            src: element.getAttribute('src'),
+          })),
+        );
+
+        if (this.googleDriveStream) {
+          // The stream attaches its own source once set up
+          removeElement(Array.from(this.media.querySelectorAll('source')));
+          this.media.removeAttribute('src');
+          this.media.load();
+        } else if (rewriteGoogleDriveSources(this.media, this.config)) {
+          this.media.load();
+        }
+
         break;
 
       default:
@@ -278,6 +297,11 @@ class Plyr {
 
     // Setup media
     media.setup.call(this);
+
+    // Start Google Drive chunked streaming (now that the media element is in place)
+    if (this.googleDriveStream) {
+      this.googleDriveStream.start();
+    }
 
     // Listen for events if debugging
     if (this.config.debug) {

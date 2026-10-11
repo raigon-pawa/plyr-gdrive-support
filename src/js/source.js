@@ -5,23 +5,29 @@
 import { providers } from './config/types';
 import html5 from './html5';
 import media from './media';
+import GoogleDriveStream from './plugins/google-drive-stream';
 import PreviewThumbnails from './plugins/preview-thumbnails';
 import support from './support';
 import ui from './ui';
 import { createElement, insertElement, removeElement } from './utils/elements';
+import { getGoogleDriveStreamUrl } from './utils/google-drive';
 import is from './utils/is';
 import { getDeep } from './utils/objects';
 
 const source = {
   // Add elements to HTML5 media (source, tracks, etc)
   insertElements(type, attributes) {
+    // Rewrite Google Drive links into streamable URLs
+    const resolve = (attribute) =>
+      type === 'source' && is.string(attribute.src)
+        ? { ...attribute, src: getGoogleDriveStreamUrl(attribute.src, this.config) }
+        : attribute;
+
     if (is.string(attributes)) {
-      insertElement(type, this.media, {
-        src: attributes,
-      });
+      insertElement(type, this.media, resolve({ src: attributes }));
     } else if (is.array(attributes)) {
       attributes.forEach((attribute) => {
-        insertElement(type, this.media, attribute);
+        insertElement(type, this.media, resolve(attribute));
       });
     }
   },
@@ -99,9 +105,13 @@ const source = {
       // Restore class hook
       ui.addStyleHook.call(this);
 
-      // Set new sources for html5
+      // Set new sources for html5 (Google Drive chunked streaming attaches its own source later)
       if (this.isHTML5) {
-        source.insertElements.call(this, 'source', sources);
+        this.googleDriveStream = GoogleDriveStream.create(this, sources);
+
+        if (!this.googleDriveStream) {
+          source.insertElements.call(this, 'source', sources);
+        }
       }
 
       // Set video title
@@ -126,7 +136,11 @@ const source = {
 
       // Load HTML5 sources
       if (this.isHTML5) {
-        this.media.load();
+        if (this.googleDriveStream) {
+          this.googleDriveStream.start();
+        } else {
+          this.media.load();
+        }
       }
 
       // Update previewThumbnails config & reload plugin

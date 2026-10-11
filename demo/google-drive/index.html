@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plyr + Google Drive demo</title>
+    <!-- Styles are unchanged by the Google Drive work, so the published CSS is fine -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.8.5/dist/plyr.css" />
+    <!-- Plyr's two npm dependencies, so src/js can run in the browser without a build -->
+    <script type="importmap">
+      {
+        "imports": {
+          "loadjs": "https://cdn.jsdelivr.net/npm/loadjs@4.3.0/+esm",
+          "rangetouch": "https://cdn.jsdelivr.net/npm/rangetouch@2.0.1/+esm"
+        }
+      }
+    </script>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --panel: #fff;
+        --text: #1b1f24;
+        --muted: #5b6470;
+        --border: #d9dde3;
+        --accent: #00b2ff;
+        --ok: #1a7f37;
+        --warn: #9a6700;
+        --err: #cf222e;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1216;
+          --panel: #171b21;
+          --text: #e6e9ee;
+          --muted: #98a2ae;
+          --border: #2c333c;
+          --ok: #3fb950;
+          --warn: #d29922;
+          --err: #f85149;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px 16px 64px;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          15px/1.5 system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        display: grid;
+        gap: 20px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.5rem;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 18px;
+      }
+      form {
+        display: grid;
+        gap: 14px;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      label small {
+        font-weight: 400;
+        color: var(--muted);
+      }
+      input,
+      select {
+        width: 100%;
+        padding: 9px 11px;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      button {
+        padding: 9px 18px;
+        border: 0;
+        border-radius: 7px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      code,
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: 0.85rem;
+        word-break: break-all;
+      }
+      .resolved {
+        display: grid;
+        gap: 4px;
+        font-size: 0.9rem;
+      }
+      #log {
+        max-height: 260px;
+        overflow: auto;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      label.checkbox {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        font-weight: 600;
+      }
+      label.checkbox input {
+        width: auto;
+        margin-top: 4px;
+      }
+      #diagnostics {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      #diagnostics li {
+        padding: 2px 0;
+      }
+      #log li {
+        padding: 3px 0;
+        border-bottom: 1px dashed var(--border);
+      }
+      .ok {
+        color: var(--ok);
+      }
+      .warn {
+        color: var(--warn);
+      }
+      .err {
+        color: var(--err);
+      }
+      #banner[hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Plyr + Google Drive</h1>
+        <p>
+          Paste a Google Drive link (shared as <em>Anyone with the link</em>) to test streaming with your local build of
+          Plyr.
+        </p>
+      </header>
+
+      <div id="banner" class="panel err" hidden></div>
+
+      <section class="panel">
+        <form id="form">
+          <label>
+            Google Drive link
+            <input
+              id="src"
+              type="url"
+              required
+              placeholder="https://drive.google.com/file/d/FILE_ID/view?usp=sharing"
+              autocomplete="off"
+            />
+          </label>
+          <label>
+            Drive API key <small>(optional, recommended for reliable seeking; stored only in this browser)</small>
+            <input id="apiKey" type="password" placeholder="AIza..." autocomplete="off" />
+          </label>
+          <div class="row">
+            <label>
+              Media type
+              <select id="type">
+                <option value="video">Video</option>
+                <option value="audio">Audio</option>
+              </select>
+            </label>
+            <label>
+              MIME type <small>(optional)</small>
+              <input id="mime" type="text" placeholder="video/mp4" autocomplete="off" />
+            </label>
+          </div>
+          <label class="checkbox">
+            <input id="chunked" type="checkbox" />
+            <span
+              >Chunked streaming
+              <small>(downloads small pieces only as needed via Media Source Extensions; needs an API key)</small></span
+            >
+          </label>
+          <div class="actions">
+            <button type="submit">Load</button>
+            <button type="button" class="secondary" id="clear">Clear saved values</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel resolved">
+        <strong>Resolved stream URL</strong>
+        <span id="resolved" class="mono">-</span>
+        <span id="stats" class="mono" hidden></span>
+        <div class="actions">
+          <button type="button" class="secondary" id="check">Check stream URL</button>
+        </div>
+        <ul id="diagnostics" class="mono"></ul>
+      </section>
+
+      <section id="playerWrap">
+        <video id="player" playsinline controls></video>
+      </section>
+
+      <section class="panel">
+        <strong>Event log</strong>
+        <ul id="log" class="mono"></ul>
+      </section>
+    </main>
+
+    <script type="module">
+      // Load Plyr straight from the source (served by serve.py, no build needed)
+      import('../../src/js/plyr.js')
+        .then(function (module) {
+          window.Plyr = module.default;
+          run();
+        })
+        .catch(function (error) {
+          var banner = document.getElementById('banner');
+          banner.innerHTML =
+            'Could not load Plyr from <code>src/js</code>. Start the demo with ' +
+            '<code>python demo/google-drive/serve.py</code> and open it from <code>http://localhost:8765</code>.' +
+            '<br /><span class="mono">' +
+            String(error).replace(/</g, '&lt;') +
+            '</span>';
+          banner.hidden = false;
+        });
+
+      function run() {
+        var STORAGE_KEY = 'plyr-google-drive-demo';
+        var $ = function (id) {
+          return document.getElementById(id);
+        };
+        var banner = $('banner');
+        var logList = $('log');
+        var player = null;
+
+        function log(message, level) {
+          var item = document.createElement('li');
+          item.className = level || '';
+          item.textContent = new Date().toLocaleTimeString() + '  ' + message;
+          logList.prepend(item);
+        }
+
+        function showBanner(html) {
+          banner.innerHTML = html;
+          banner.hidden = false;
+        }
+
+        if (!window.Plyr.defaults || !window.Plyr.defaults.googleDrive) {
+          showBanner('The loaded Plyr has no Google Drive support.');
+          return;
+        }
+
+        function readSaved() {
+          try {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+          } catch (e) {
+            return {};
+          }
+        }
+
+        function save(values) {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(values));
+          } catch (e) {
+            // Storage unavailable; ignore
+          }
+        }
+
+        // Prefill: ?src=...&key=... take priority over saved values
+        var params = new URLSearchParams(location.search);
+        var saved = readSaved();
+        $('src').value = params.get('src') || saved.src || '';
+        $('apiKey').value = params.get('key') || saved.apiKey || '';
+        $('type').value = params.get('type') || saved.type || 'video';
+        $('mime').value = params.get('mime') || saved.mime || '';
+        $('chunked').checked = params.has('chunked') ? params.get('chunked') === '1' : Boolean(saved.chunked);
+
+        var resolvedUrl = '';
+        var watchdog = null;
+
+        var networkStates = ['NETWORK_EMPTY', 'NETWORK_IDLE', 'NETWORK_LOADING', 'NETWORK_NO_SOURCE'];
+        var readyStates = [
+          'HAVE_NOTHING',
+          'HAVE_METADATA',
+          'HAVE_CURRENT_DATA',
+          'HAVE_FUTURE_DATA',
+          'HAVE_ENOUGH_DATA',
+        ];
+
+        function diag(message, level) {
+          var item = document.createElement('li');
+          item.className = level || '';
+          item.textContent = message;
+          $('diagnostics').appendChild(item);
+        }
+
+        function mask(url) {
+          return url.replace(/key=[^&]+/, 'key=***');
+        }
+
+        // Identify the container from the first bytes of the file
+        function sniff(bytes) {
+          var ascii = String.fromCharCode.apply(null, Array.from(bytes.slice(0, 64)));
+          if (ascii.slice(4, 8) === 'ftyp') {
+            return { name: 'MP4/MOV (brand "' + ascii.slice(8, 12).trim() + '")', mime: 'video/mp4' };
+          }
+          if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) {
+            return ascii.indexOf('webm') !== -1
+              ? { name: 'WebM', mime: 'video/webm' }
+              : { name: 'Matroska (MKV)', mime: 'video/x-matroska' };
+          }
+          if (ascii.slice(0, 4) === 'RIFF') {
+            return { name: 'AVI/RIFF', mime: 'video/x-msvideo' };
+          }
+          if (ascii.slice(0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)) {
+            return { name: 'MP3', mime: 'audio/mpeg' };
+          }
+          if (ascii.slice(0, 4) === 'OggS') {
+            return { name: 'Ogg', mime: 'video/ogg' };
+          }
+          if (bytes[0] === 0x47) {
+            return { name: 'MPEG-TS', mime: 'video/mp2t' };
+          }
+          return null;
+        }
+
+        // Request the first few KB of the stream URL and report exactly what Google sends back
+        async function checkUrl() {
+          $('diagnostics').innerHTML = '';
+          if (!resolvedUrl) {
+            diag('Load a link first.', 'warn');
+            return;
+          }
+
+          if (/resourcekey=/i.test($('src').value)) {
+            diag(
+              'This link has a resourcekey. Older shared files need it and a <video> tag cannot send it. ' +
+                'In Drive, open Share > Security update and remove it for this file, or re-upload the file.',
+              'err',
+            );
+          }
+
+          diag('Requesting ' + mask(resolvedUrl));
+          var response;
+          try {
+            response = await fetch(resolvedUrl, { headers: { Range: 'bytes=0-4095' } });
+          } catch (error) {
+            diag(
+              'Request blocked before a response could be read (' +
+                error.message +
+                '). ' +
+                (/googleapis\.com/.test(resolvedUrl)
+                  ? 'The Drive API normally allows this, so Google probably returned an error page without CORS headers, ' +
+                    'most often its "unusual traffic / automated queries" block after many requests. ' +
+                    'Wait a while (or try another network) and retry; check the request in DevTools > Network.'
+                  : 'The download endpoint sends no CORS headers, so it cannot be inspected from the page. ' +
+                    'Open the stream URL in a new tab to see what Google returns, or use an API key.'),
+              'warn',
+            );
+            return;
+          }
+
+          var type = response.headers.get('content-type') || '(none)';
+          diag(
+            'HTTP ' + response.status + ' ' + response.statusText + ', content-type: ' + type,
+            response.ok ? 'ok' : 'err',
+          );
+
+          if (!response.ok || /json|html|text/.test(type)) {
+            var text = (await response.text()).slice(0, 600);
+            diag('Response body: ' + text.replace(/\s+/g, ' '), 'err');
+            if (/referer|referrer/i.test(text)) {
+              diag('Fix: add ' + location.origin + '/* to the API key Website restrictions.', 'err');
+            } else if (/has not been used|disabled/i.test(text)) {
+              diag('Fix: enable "Google Drive API" in the Cloud project that owns this key.', 'err');
+            } else if (/API key not valid|keyInvalid/i.test(text)) {
+              diag('Fix: the API key is wrong or was deleted.', 'err');
+            } else if (/notFound|File not found/i.test(text)) {
+              diag('Fix: the file is not public, the ID is wrong, or it needs a resourcekey (see above).', 'err');
+            } else if (/quota|rate|exceeded/i.test(text)) {
+              diag('Fix: download quota hit. Wait, or make a copy of the file.', 'err');
+            } else if (/<html/i.test(text)) {
+              diag('Google returned a web page instead of the file (sign-in, virus scan, or quota page).', 'err');
+            }
+            return;
+          }
+
+          diag(
+            response.status === 206
+              ? 'Range requests supported (' + response.headers.get('content-range') + '), so seeking will work'
+              : 'No range support (status ' + response.status + '), so seeking may not work',
+            response.status === 206 ? 'ok' : 'warn',
+          );
+
+          var bytes = new Uint8Array(await response.arrayBuffer());
+          var format = sniff(bytes);
+          if (!format) {
+            diag('Unrecognised file format. Browsers play MP4 (H.264/AAC), WebM and MP3 reliably.', 'warn');
+            return;
+          }
+          var support = document.createElement('video').canPlayType(format.mime);
+          diag(
+            'File format: ' + format.name + '. Browser support for ' + format.mime + ': ' + (support || 'none'),
+            support ? 'ok' : 'err',
+          );
+          if (!support) {
+            diag('This browser cannot play this format. Convert it to MP4 (H.264 video, AAC audio).', 'err');
+          } else if (format.mime === 'video/mp4') {
+            diag(
+              'The file itself is reachable. If it still will not play, the video codec is probably H.265/HEVC ' +
+                '(not supported in most browsers). Re-encode it to H.264.',
+            );
+          }
+        }
+
+        var mediaErrors = {
+          1: 'MEDIA_ERR_ABORTED',
+          2: 'MEDIA_ERR_NETWORK',
+          3: 'MEDIA_ERR_DECODE',
+          4: 'MEDIA_ERR_SRC_NOT_SUPPORTED (file not public, quota exceeded, or unsupported format)',
+        };
+
+        // Live chunked streaming stats
+        setInterval(function () {
+          var stream = player && player.googleDriveStream;
+          var el = $('stats');
+          if (!stream) {
+            el.hidden = true;
+            return;
+          }
+          var s = stream.stats;
+          var media = player.media;
+          var ahead = 0;
+          for (var i = 0; media && i < media.buffered.length; i += 1) {
+            if (media.buffered.start(i) <= media.currentTime + 0.5 && media.buffered.end(i) >= media.currentTime) {
+              ahead = media.buffered.end(i) - media.currentTime;
+            }
+          }
+          el.hidden = false;
+          el.className = 'mono ' + (s.mode === 'chunked' ? 'ok' : s.mode === 'progressive' ? 'warn' : '');
+          el.textContent =
+            'Mode: ' +
+            s.mode +
+            (s.reason ? ' (' + s.reason + ')' : '') +
+            (s.mode === 'chunked'
+              ? ' | ' +
+                s.requests +
+                ' requests | ' +
+                (s.bytes / 1048576).toFixed(1) +
+                ' of ' +
+                (s.size / 1048576).toFixed(1) +
+                ' MB downloaded | ' +
+                ahead.toFixed(0) +
+                's buffered ahead'
+              : '');
+        }, 500);
+
+        function createPlayer(apiKey, chunked) {
+          if (player) {
+            player.destroy();
+          }
+
+          player = new Plyr('#player', {
+            debug: false,
+            googleDrive: { apiKey: apiKey || null, chunked: Boolean(chunked) },
+            speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+          });
+
+          [
+            'loadstart',
+            'loadedmetadata',
+            'canplay',
+            'playing',
+            'pause',
+            'seeking',
+            'seeked',
+            'waiting',
+            'ended',
+          ].forEach(function (name) {
+            player.on(name, function () {
+              // When switching sources Plyr loads a blank video into the old (detached) element to cancel
+              // its requests, and that element's events still reach the player. Ignore them by checking
+              // that the current element has actually reached the state the event claims.
+              var media = player.media;
+              var needed = { loadedmetadata: 1, canplay: 3 }[name];
+              if (needed && (!media || media.readyState < needed)) {
+                return;
+              }
+              var detail = '';
+              if (name === 'loadedmetadata') {
+                detail = ' duration=' + player.duration.toFixed(1) + 's';
+              }
+              if (name === 'seeked') {
+                detail = ' at ' + player.currentTime.toFixed(1) + 's';
+              }
+              log(name + detail, name === 'canplay' || name === 'seeked' ? 'ok' : '');
+            });
+          });
+
+          player.on('error', function () {
+            var error = player.media && player.media.error;
+            log('error: ' + (error ? mediaErrors[error.code] || 'code ' + error.code : 'unknown'), 'err');
+            checkUrl();
+          });
+
+          player.on('stalled', function () {
+            log('stalled', 'warn');
+          });
+
+          // A failing <source> fires "error" on the <source> element only, never on <video>,
+          // so it doesn't reach Plyr or the console. Catch it in the capture phase.
+          player.elements.container.addEventListener(
+            'error',
+            function (event) {
+              if (event.target && event.target.tagName === 'SOURCE') {
+                clearTimeout(watchdog);
+                log('source failed to load: ' + mask(event.target.getAttribute('src') || ''), 'err');
+                checkUrl();
+              }
+            },
+            true,
+          );
+
+          player.on('loadedmetadata', function () {
+            clearTimeout(watchdog);
+          });
+
+          return player;
+        }
+
+        function load() {
+          var values = {
+            src: $('src').value.trim(),
+            apiKey: $('apiKey').value.trim(),
+            type: $('type').value,
+            mime: $('mime').value.trim(),
+            chunked: $('chunked').checked,
+          };
+
+          if (!values.src) {
+            return;
+          }
+
+          save(values);
+          logList.innerHTML = '';
+          banner.hidden = true;
+
+          createPlayer(values.apiKey, values.chunked);
+
+          var sourceEntry = { src: values.src };
+          if (values.mime) {
+            sourceEntry.type = values.mime;
+          }
+
+          player.source = {
+            type: values.type,
+            title: 'Google Drive file',
+            sources: [sourceEntry],
+          };
+
+          // Show what Plyr actually requested (hide the API key)
+          // Changing the source is synchronous for HTML5, so the new <source> exists now
+          (function () {
+            // Chunked streaming has no <source>; it fetches the URL itself
+            var stream = player.googleDriveStream;
+            var element = player.media && player.media.querySelector('source');
+            var resolved = stream ? stream.url : (element && element.getAttribute('src')) || '';
+            resolvedUrl = resolved;
+            $('resolved').textContent = resolved ? mask(resolved) : '-';
+            $('diagnostics').innerHTML = '';
+
+            // Report if nothing has loaded after a while
+            clearTimeout(watchdog);
+            watchdog = setTimeout(function () {
+              var media = player.media;
+              log(
+                'No metadata after 15s: ' +
+                  networkStates[media.networkState] +
+                  ', ' +
+                  readyStates[media.readyState] +
+                  '. Running a check...',
+                'warn',
+              );
+              checkUrl();
+            }, 15000);
+
+            if (resolved === values.src) {
+              log('Link was not recognised as a Google Drive URL; played as-is', 'warn');
+            } else if (resolved) {
+              log(
+                'Using ' +
+                  (values.apiKey ? 'Drive API' : 'public download endpoint') +
+                  (stream ? ' with chunked streaming' : values.chunked ? ' (chunked streaming needs an API key)' : ''),
+                values.chunked && !stream ? 'warn' : 'ok',
+              );
+            }
+          })();
+        }
+
+        $('form').addEventListener('submit', function (event) {
+          event.preventDefault();
+          load();
+        });
+
+        $('check').addEventListener('click', checkUrl);
+
+        $('clear').addEventListener('click', function () {
+          try {
+            localStorage.removeItem(STORAGE_KEY);
+          } catch (e) {
+            // ignore
+          }
+          $('src').value = '';
+          $('apiKey').value = '';
+          $('mime').value = '';
+          log('Saved values cleared');
+        });
+
+        createPlayer($('apiKey').value.trim(), $('chunked').checked);
+
+        if ($('src').value) {
+          load();
+        }
+      }
+    </script>
+  </body>
+</html>

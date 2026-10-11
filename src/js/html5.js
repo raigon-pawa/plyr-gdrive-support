@@ -126,6 +126,12 @@ const html5 = {
       return;
     }
 
+    // Stop Google Drive chunked streaming
+    if (this.googleDriveStream) {
+      this.googleDriveStream.destroy();
+      this.googleDriveStream = null;
+    }
+
     // Remove child sources
     removeElement(html5.getSources.call(this));
 

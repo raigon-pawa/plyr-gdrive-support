@@ -521,6 +521,11 @@ declare namespace Plyr {
     youtube?: object;
 
     /**
+     * Google Drive Options. Drive share links used as HTML5 sources are rewritten into streamable URLs.
+     */
+    googleDrive?: GoogleDriveOptions;
+
+    /**
      * Preview Thumbnails Options.
      */
     previewThumbnails?: PreviewThumbnailsOptions;
@@ -534,6 +539,41 @@ declare namespace Plyr {
      * Markers Options
      */
     markers?: MarkersOptions;
+  }
+
+  interface GoogleDriveOptions {
+    /**
+     * Whether to rewrite Google Drive links. Defaults to true.
+     */
+    enabled?: boolean;
+
+    /**
+     * Optional Google Drive API key. When set, files are streamed via the Drive API (recommended, supports seeking).
+     * Without it, the public download endpoint is used.
+     */
+    apiKey?: string | null;
+
+    /**
+     * Stream MP4 files in byte-range chunks through Media Source Extensions instead of a single progressive
+     * download, so only what's needed to stay ahead of the playhead is fetched. Requires apiKey. Falls back to
+     * progressive download if the browser, file format or codec isn't supported. Defaults to false.
+     */
+    chunked?: boolean;
+
+    /**
+     * Bytes per range request when chunked. Defaults to 2097152 (2 MB).
+     */
+    chunkSize?: number;
+
+    /**
+     * Seconds to buffer ahead of the playhead before pausing downloads when chunked. Defaults to 30.
+     */
+    bufferAhead?: number;
+
+    /**
+     * Seconds of media to keep behind the playhead before freeing memory when chunked. Defaults to 30.
+     */
+    bufferBehind?: number;
   }
 
   interface QualityOptions {
